@@ -295,6 +295,8 @@ void version_2(double (*function_ptr)(double), double left, double right,
 }
 
 int main(int argc, char** argv) {
+    setbuf(stdout, NULL);
+
     // Define here the function we want to integrate
     // double (*function_ptr)(double) = &inv_function;
     double (*function_ptr)(double) = &const_function;
