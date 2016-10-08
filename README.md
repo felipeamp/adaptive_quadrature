@@ -21,4 +21,10 @@ Execute both versions with different number of processes (2, 4 and 8) and differ
 How to use and Configure
 ------------------------
 
-TODO
+To change the number of worker processes, number of intervals (for version 2) and maximum error ratio allowed, just change the global variables NUM_WORKER_PROCS, NUM_INTERVALS and TAU at the beginning of the code. To change the functio or interval of integration, change the first lines of the main function.
+
+To compile and execute:
+
+`mpicc main.C -o main.out`
+
+`mpiexec -np <NUM_WORKER_PROCS + 1> main.out`

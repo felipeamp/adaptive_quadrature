@@ -5,12 +5,12 @@
 #include <mpi.h>
 
 
-#define NUM_PROCS 4 //2 4 8
+#define NUM_WORKER_PROCS 4 //2 4 8
 #define NUM_INTERVALS 100 // 25 50 75 125 150 175
 #define TAU 0.2 // Maximum allowed error ratio between new_trap_1 + new_trap_2 and old_trap
 
 static double total_time_ver_1;
-static double time_ver_1_per_proc[NUM_PROCS];
+static double time_ver_1_per_proc[NUM_WORKER_PROCS];
 static double total_time_ver_2;
 
 
@@ -23,10 +23,10 @@ double const_function(double x) {
 }
 
 void print_times() {
-    printf("\nNUM_PROCS = %d", NUM_PROCS);
+    printf("\nNUM_WORKER_PROCS = %d", NUM_WORKER_PROCS);
     printf("Total time for version 1: %f\n", total_time_ver_1);
     printf("Time taken to finish:\n");
-    for (int proc_index = 0; proc_index < NUM_PROCS; ++proc_index) {
+    for (int proc_index = 0; proc_index < NUM_WORKER_PROCS; ++proc_index) {
         printf("\tproc #%d: %f\n", proc_index, time_ver_1_per_proc[proc_index]);
     }
 
@@ -87,10 +87,10 @@ void version_1(double (*function_ptr)(double), double left, double right,
         clock_t start_time = clock();
 
         double local_area = 0.0;
-        double interval_step_size = (left + right) / (double)NUM_PROCS;
+        double interval_step_size = (left + right) / (double)NUM_WORKER_PROCS;
 
         // Send a task to each process
-        for (int proc_number = 0; proc_number < NUM_PROCS; ++proc_number) {
+        for (int proc_number = 0; proc_number < NUM_WORKER_PROCS; ++proc_number) {
             double send_data[2];
             send_data[0] = left + interval_step_size * proc_number;
             send_data[1] = left + interval_step_size * (proc_number + 1);
@@ -183,7 +183,7 @@ void version_2(double (*function_ptr)(double), double left, double right,
         double interval_step_size = (left + right) / (double)NUM_INTERVALS;
 
         // At the beginning each worker process will send 0.0 to the master process.
-        int intervals_done = -NUM_PROCS;
+        int intervals_done = -NUM_WORKER_PROCS;
         int tasks_sent = 0;
         int flag, source;
         MPI_Status status;
