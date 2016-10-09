@@ -83,7 +83,7 @@ void print_times() {
             printf("\t\tWorker process #%d: %fs\n",
                    worker_proc_index,
                    total_time_per_proc_ver_2[worker_proc_index]);
-        }
+}
         printf("\n============================================================================\n");
     }
 }
@@ -175,11 +175,19 @@ void master_process_ver_1(double left, double right) {
 
     clock_t finish_time = clock();
     total_time_ver_1 = (double)(finish_time - start_time) / CLOCKS_PER_SEC;
+
+    for (int worker_proc_number = 0; worker_proc_number < NUM_WORKER_PROCS; ++worker_proc_number) {
+        MPI_Recv((void*) &total_time_per_proc_ver_1[worker_proc_number],
+                 1,
+                 MPI_DOUBLE,
+                 1 + worker_proc_number,
+                 MPI_ANY_TAG,
+                 MPI_COMM_WORLD,
+                 MPI_STATUS_IGNORE);
+    }
 }
 
 void worker_process_ver_1(double (*function_ptr)(double), int rank) {
-    clock_t proc_start_time = clock();
-
     double received_data[2];
     MPI_Recv((void*) &received_data,
              2,
@@ -188,6 +196,9 @@ void worker_process_ver_1(double (*function_ptr)(double), int rank) {
              MPI_ANY_TAG,
              MPI_COMM_WORLD,
              MPI_STATUS_IGNORE);
+
+    clock_t proc_start_time = clock();
+
     double curr_left = received_data[0];
     double curr_right = received_data[1];
 
@@ -214,8 +225,7 @@ void worker_process_ver_1(double (*function_ptr)(double), int rank) {
                                         rank);
 
     clock_t proc_finish_time = clock();
-    total_time_per_proc_ver_1[rank - 1] = (double)(proc_finish_time - proc_start_time)
-                                          / CLOCKS_PER_SEC;
+    double time_taken = (double)(proc_finish_time - proc_start_time) / (double)CLOCKS_PER_SEC;
 
     MPI_Reduce((void*) &local_area,
                NULL,
@@ -224,6 +234,13 @@ void worker_process_ver_1(double (*function_ptr)(double), int rank) {
                MPI_SUM,
                0,
                MPI_COMM_WORLD);
+
+    MPI_Send((void*) &time_taken,
+             1,
+             MPI_DOUBLE,
+             0,
+             0,
+             MPI_COMM_WORLD);
 }
 
 void version_1(double (*function_ptr)(double), double left, double right) {
@@ -297,6 +314,13 @@ void master_process_ver_2(double left, double right) {
                          source,
                          1,
                          MPI_COMM_WORLD);
+                MPI_Recv((void*) &total_time_per_proc_ver_2[source - 1],
+                         1,
+                         MPI_DOUBLE,
+                         source,
+                         MPI_ANY_TAG,
+                         MPI_COMM_WORLD,
+                         MPI_STATUS_IGNORE);
             }
         }
     }
@@ -358,8 +382,13 @@ void worker_process_ver_2(double (*function_ptr)(double), int rank) {
     }
 
     clock_t proc_finish_time = clock();
-    total_time_per_proc_ver_2[rank - 1] = (double)(proc_finish_time - proc_start_time)
-                                          / CLOCKS_PER_SEC;
+    double total_time = (double)(proc_finish_time - proc_start_time) / CLOCKS_PER_SEC;
+    MPI_Send((void*) &total_time,
+         1,
+         MPI_DOUBLE,
+         0,
+         0,
+         MPI_COMM_WORLD);
 }
 
 void version_2(double (*function_ptr)(double), double left, double right) {
