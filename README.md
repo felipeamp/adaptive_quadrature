@@ -29,3 +29,5 @@ To compile and execute:
 `mpicc main.C -o main.out`
 
 `mpiexec -np <NUM_WORKER_PROCS + 1> /full/path/to/main.out`
+
+To run the code in debug mode (that is, printing every time a message is sent or if adaptive quadrature calls itself recursively), just change DEBUG to 1 at the beginning of the code.

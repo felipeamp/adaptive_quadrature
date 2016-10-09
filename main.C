@@ -10,7 +10,7 @@
 #define YELLOW  "\x1b[33m"
 #define RESET "\x1b[0m"
 
-
+#define DEBUG 0
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 ////                                                                                           ////
@@ -108,8 +108,10 @@ double adap_quadrature(double (*function_ptr)(double),
     double approx_left_half = trap_area(left, f_left, center, f_center);
     double approx_right_half = trap_area(center, f_center, right, f_right);
     if (error_ratio(approx_left_half, approx_right_half, prev_approx) > TAU) {
-        printf(RED "\tWorker proc %d needed an extra level of recursion to calculate the "
-               "integral on the interval [%f, %f].\n" RESET, rank, left, right);
+        #if DEBUG
+            printf(RED "\tWorker proc %d needed an extra level of recursion to calculate the "
+                   "integral on the interval [%f, %f].\n" RESET, rank, left, right);
+        #endif
         double left_area = adap_quadrature(function_ptr,
                                            left,
                                            f_left,
@@ -158,11 +160,12 @@ void master_process_ver_1(double left, double right) {
                  0,
                  MPI_COMM_WORLD);
 
-        // DEBUG:
-        printf(GREEN "Sent interval [%f, %f] to worker_proc_number %d.\n" RESET,
-               send_data[0],
-               send_data[1],
-               worker_proc_number);
+        #if DEBUG
+            printf(GREEN "Sent interval [%f, %f] to worker_proc_number %d.\n" RESET,
+                   send_data[0],
+                   send_data[1],
+                   worker_proc_number);
+        #endif
     }
 
     MPI_Reduce((void*) &local_area,
@@ -202,11 +205,12 @@ void worker_process_ver_1(double (*function_ptr)(double), int rank) {
     double curr_left = received_data[0];
     double curr_right = received_data[1];
 
-    // DEBUG:
-    printf(YELLOW "Process %d received interval [%f, %f] from process 0.\n" RESET,
-           rank,
-           curr_left,
-           curr_right);
+    #if DEBUG
+        printf(YELLOW "Process %d received interval [%f, %f] from process 0.\n" RESET,
+               rank,
+               curr_left,
+               curr_right);
+    #endif
 
     // Initial area approximation
     double f_curr_left = (*function_ptr)(curr_left);
@@ -289,9 +293,9 @@ void master_process_ver_2(double left, double right) {
             ++intervals_done;
             area_found_ver_2 += received_data;
 
-            // DEBUG
-            printf(GREEN "Worker %d sent local_area = %f.\n" RESET, source, received_data);
-
+            #if DEBUG
+                printf(GREEN "Worker %d sent local_area = %f.\n" RESET, source, received_data);
+            #endif
 
             if (tasks_sent < NUM_INTERVALS) {
                 // There is still some task to be done.
@@ -345,11 +349,12 @@ void worker_process_ver_2(double (*function_ptr)(double), int rank) {
             // at the origin in case it is not well-defined. That could happen only at the
             // beginning of a run.
 
-            // DEBUG:
-            printf(YELLOW "Process %d received interval [%f, %f] from process 0.\n" RESET,
-                   rank,
-                   curr_left,
-                   curr_right);
+            #if DEBUG
+                printf(YELLOW "Process %d received interval [%f, %f] from process 0.\n" RESET,
+                       rank,
+                       curr_left,
+                       curr_right);
+            #endif
 
             // Initial area calculation
             double f_curr_left = (*function_ptr)(curr_left);
