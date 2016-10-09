@@ -4,15 +4,19 @@
 
 #include <mpi.h>
 
+// Define colors for printf use
+#define RED     "\x1b[31m"
+#define GREEN   "\x1b[32m"
+#define YELLOW  "\x1b[33m"
+#define BLUE    "\x1b[34m"
+#define MAGENTA "\x1b[35m"
+#define CYAN    "\x1b[36m"
+#define RESET "\x1b[0m"
+
 
 #define NUM_WORKER_PROCS 4 //2 4 8
 #define NUM_INTERVALS 100 // 25 50 75 125 150 175
-#define TAU 0.2 // Maximum allowed error ratio between new_trap_1 + new_trap_2 and old_trap
-
-static double total_time_ver_1;
-static double time_ver_1_per_proc[NUM_WORKER_PROCS];
-static double total_time_ver_2;
-
+#define TAU 0.001 // Maximum allowed error ratio between new_trap_1 + new_trap_2 and old_trap
 
 double inv_function(double x) {
     return 1.0/x;
@@ -22,16 +26,28 @@ double const_function(double x) {
     return 1.0;
 }
 
-void print_times() {
-    printf("\nNUM_WORKER_PROCS = %d", NUM_WORKER_PROCS);
-    printf("Total time for version 1: %f\n", total_time_ver_1);
-    printf("Time taken to finish:\n");
-    for (int proc_index = 0; proc_index < NUM_WORKER_PROCS; ++proc_index) {
-        printf("\tproc #%d: %f\n", proc_index, time_ver_1_per_proc[proc_index]);
-    }
+static double (*function_ptr)(double) = &inv_function;
+//static double (*function_ptr)(double) = &const_function;
+static double left = 0.001;
+static double right = 10.0;
 
-    printf("\nNUM_INTERVALS = %d", NUM_INTERVALS);
-    printf("Total time for version 2: %f\n", total_time_ver_2);
+static int is_version_2 = 0; // 0 for version 1, 1 for version 2.
+
+static double total_time;
+static double total_time_per_proc[NUM_WORKER_PROCS];
+
+void print_times() {
+    printf("\nNUM_WORKER_PROCS = %d\n", NUM_WORKER_PROCS);
+    if (is_version_2) {
+        printf("NUM_INTERVALS = %d\n", NUM_INTERVALS);
+    }
+    printf("Time taken:\n");
+    printf("\tMaster process: %fs\n", total_time);
+    for (int worker_proc_index = 0; worker_proc_index < NUM_WORKER_PROCS; ++worker_proc_index) {
+        printf("\tWorker process #%d: %fs\n",
+               worker_proc_index,
+               total_time_per_proc[worker_proc_index]);
+    }
 }
 
 inline double trap_area (double left, double f_left, double right, double f_right) {
@@ -47,32 +63,36 @@ double adap_quadrature(double (*function_ptr)(double),
                        double f_left,
                        double right,
                        double f_right,
-                       double prev_approx) {
+                       double prev_approx,
+                       int rank) {
     double center = 0.5 * (left + right);
     double f_center = (*function_ptr)(center);
     double approx_left_half = trap_area(left, f_left, center, f_center);
     double approx_right_half = trap_area(center, f_center, right, f_right);
     if (error_ratio(approx_left_half, approx_right_half, prev_approx) > TAU) {
+        printf(RED "\tWorker proc %d needed an extra level of recursion to calculate the "
+               "integral on the interval [%f, %f].\n" RESET, rank, left, right);
         double left_area = adap_quadrature(function_ptr,
                                            left,
                                            f_left,
                                            center,
                                            f_center,
-                                           approx_left_half);
+                                           approx_left_half,
+                                           rank);
         double right_area = adap_quadrature(function_ptr,
                                             center,
                                             f_center,
                                             right,
                                             f_right,
-                                            approx_right_half);
+                                            approx_right_half,
+                                            rank);
         return left_area + right_area;
     } else {
         return approx_left_half + approx_right_half;
     }
 }
 
-void version_1(double (*function_ptr)(double), double left, double right,
-               double* returned_total_area) {
+void version_1(double (*function_ptr)(double), double left, double right) {
     // Initialize the MPI environment
     MPI_Init(NULL, NULL);
 
@@ -80,26 +100,33 @@ void version_1(double (*function_ptr)(double), double left, double right,
     int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-    double total_area;
+    double total_area = 0.0;
 
     if (rank == 0) {
         // Master process
         clock_t start_time = clock();
 
         double local_area = 0.0;
-        double interval_step_size = (left + right) / (double)NUM_WORKER_PROCS;
+        double interval_step_size = (right - left) / (double)NUM_WORKER_PROCS;
 
         // Send a task to each process
-        for (int proc_number = 0; proc_number < NUM_WORKER_PROCS; ++proc_number) {
+        for (int worker_proc_number = 0;
+             worker_proc_number < NUM_WORKER_PROCS;
+             ++worker_proc_number) {
             double send_data[2];
-            send_data[0] = left + interval_step_size * proc_number;
-            send_data[1] = left + interval_step_size * (proc_number + 1);
+            send_data[0] = left + interval_step_size * worker_proc_number;
+            send_data[1] = left + interval_step_size * (worker_proc_number + 1);
             MPI_Send((void*) &send_data,
                      2,
                      MPI_DOUBLE,
-                     proc_number,
+                     worker_proc_number + 1,
                      0,
                      MPI_COMM_WORLD);
+            // DEBUG:
+            printf(GREEN "Sent interval [%f, %f] to worker_proc_number %d.\n" RESET,
+                   send_data[0],
+                   send_data[1],
+                   worker_proc_number);
         }
 
         MPI_Reduce((void*) &local_area,
@@ -110,10 +137,11 @@ void version_1(double (*function_ptr)(double), double left, double right,
            0,
            MPI_COMM_WORLD);
 
-        *returned_total_area = total_area;
+        printf("\nTotal area found in version 1 is %f.\n", total_area);
 
         clock_t finish_time = clock();
-        total_time_ver_1 = (finish_time - start_time) / CLOCKS_PER_SEC;
+        total_time = (double)(finish_time - start_time) / CLOCKS_PER_SEC;
+        print_times();
 
     } else {
         // Worker process
@@ -131,7 +159,7 @@ void version_1(double (*function_ptr)(double), double left, double right,
         double curr_right = received_data[1];
 
         // DEBUG:
-        printf("Process %d received interval (%f, %f) from process 0\n",
+        printf(YELLOW "Process %d received interval [%f, %f] from process 0.\n" RESET,
                rank,
                curr_left,
                curr_right);
@@ -148,10 +176,12 @@ void version_1(double (*function_ptr)(double), double left, double right,
                                             f_curr_left,
                                             curr_right,
                                             f_curr_right,
-                                            orig_approx);
+                                            orig_approx,
+                                            rank);
 
         clock_t proc_finish_time = clock();
-        time_ver_1_per_proc[rank - 1] = (proc_finish_time - proc_start_time) / CLOCKS_PER_SEC;
+        total_time_per_proc[rank - 1] = (double)(proc_finish_time - proc_start_time)
+                                        / CLOCKS_PER_SEC;
 
         MPI_Reduce((void*) &local_area,
                    (void*) &total_area,
@@ -165,9 +195,7 @@ void version_1(double (*function_ptr)(double), double left, double right,
     MPI_Finalize();
 }
 
-void version_2(double (*function_ptr)(double), double left, double right,
-               double* returned_total_area) {
-    clock_t start_time = clock();
+void version_2(double (*function_ptr)(double), double left, double right) {
     // Initialize the MPI environment
     MPI_Init(NULL, NULL);
 
@@ -180,7 +208,7 @@ void version_2(double (*function_ptr)(double), double left, double right,
         clock_t start_time = clock();
 
         double total_area = 0.0;
-        double interval_step_size = (left + right) / (double)NUM_INTERVALS;
+        double interval_step_size = (right - left) / (double)NUM_INTERVALS;
 
         // At the beginning each worker process will send 0.0 to the master process.
         int intervals_done = -NUM_WORKER_PROCS;
@@ -205,7 +233,7 @@ void version_2(double (*function_ptr)(double), double left, double right,
                 total_area += received_data;
 
                 // DEBUG
-                printf("Worker %d sent %f\n", source, received_data);
+                printf(GREEN "Worker %d sent local_area = %f.\n" RESET, source, received_data);
 
 
                 if (tasks_sent < NUM_INTERVALS) {
@@ -231,10 +259,11 @@ void version_2(double (*function_ptr)(double), double left, double right,
                 }
             }
         }
-        *returned_total_area = total_area;
+        printf("\nTotal area found in version 2 is %f.\n", total_area);
 
         clock_t finish_time = clock();
-        total_time_ver_2 = (finish_time - start_time) / CLOCKS_PER_SEC;
+        total_time = (double)(finish_time - start_time) / CLOCKS_PER_SEC;
+        print_times();
 
     } else {
         // Worker process
@@ -245,15 +274,15 @@ void version_2(double (*function_ptr)(double), double left, double right,
         double curr_left, curr_right;
 
         while(received_data[0]) {
-            curr_left = received_data[0];
-            curr_right = received_data[1];
+            curr_left = received_data[1];
+            curr_right = received_data[2];
 
             if (curr_left != curr_right) {
                 // We added the `if` above just to make sure we don't try to calculate the function
                 // at the origin in case it is not well-defined.
 
                 // DEBUG:
-                printf("Process %d received interval (%f, %f) from process 0\n",
+                printf(YELLOW "Process %d received interval [%f, %f] from process 0.\n" RESET,
                        rank,
                        curr_left,
                        curr_right);
@@ -270,7 +299,8 @@ void version_2(double (*function_ptr)(double), double left, double right,
                                              f_curr_left,
                                              curr_right,
                                              f_curr_right,
-                                             orig_approx);
+                                             orig_approx,
+                                             rank);
             }
             MPI_Send((void*) &local_area,
                      1,
@@ -288,7 +318,8 @@ void version_2(double (*function_ptr)(double), double left, double right,
         }
 
         clock_t proc_finish_time = clock();
-        time_ver_1_per_proc[rank - 1] = (proc_finish_time - proc_start_time) / CLOCKS_PER_SEC;
+        total_time_per_proc[rank - 1] = (double)(proc_finish_time - proc_start_time)
+                                        / CLOCKS_PER_SEC;
     }
 
     MPI_Finalize();
@@ -296,19 +327,9 @@ void version_2(double (*function_ptr)(double), double left, double right,
 
 int main(int argc, char** argv) {
     setbuf(stdout, NULL);
-
-    // Define here the function we want to integrate
-    // double (*function_ptr)(double) = &inv_function;
-    double (*function_ptr)(double) = &const_function;
-    double left = 0.1;
-    double right = 10.0;
-
-    double version_1_area = 0.0;
-    version_1(function_ptr, left, right, &version_1_area);
-    printf("Area from version 1: %f\n", version_1_area);
-
-    double version_2_area = 0.0;
-    version_2(function_ptr, left, right, &version_2_area);
-    printf("Area from version 2: %f\n", version_2_area);
-    print_times();
+    if (!is_version_2) {
+        version_1(function_ptr, left, right);
+    } else {
+        version_2(function_ptr, left, right);
+    }
 }
