@@ -22,7 +22,7 @@ Note: the master process should not make any integral calculations.
 How to use and Configure
 ------------------------
 
-All configuration variables are global variables at the beginning of the code. That includes the number of worker processes (NUM_WORKER_PROCS), number of intervals for version 2 (NUM_INTERVALS), maximum error ratio allowed (TAU), the function to integrate (function_ptr) and the interval of integration (left and right) and which version to run (is_version_2 = 0 if version 1, and 1 if version 2).
+All configuration variables are global variables at the beginning of the code. That includes the number of worker processes (NUM_WORKER_PROCS), number of intervals for version 2 (NUM_INTERVALS), maximum error ratio allowed (TAU), the function to be integrated (function_ptr) and the interval of integration (left and right).
 
 To compile and execute:
 
