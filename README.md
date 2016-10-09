@@ -17,6 +17,7 @@ The program must have two versions:
 
 Execute both versions with different number of processes (2, 4 and 8) and different numbers of tasks in the initial pool, doing a few time measurements for each combination.
 
+Note: the master process should not make any integral calculations.
 
 How to use and Configure
 ------------------------
