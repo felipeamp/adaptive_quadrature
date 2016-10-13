@@ -107,7 +107,8 @@ double adap_quadrature(double (*function_ptr)(double),
     double f_center = (*function_ptr)(center);
     double approx_left_half = trap_area(left, f_left, center, f_center);
     double approx_right_half = trap_area(center, f_center, right, f_right);
-    if (error_ratio(approx_left_half, approx_right_half, prev_approx) > TAU) {
+    if ((prev_approx == 0.0 && (approx_left_half != 0.0 || approx_right_half != 0.0))
+        || error_ratio(approx_left_half, approx_right_half, prev_approx) > TAU) {
         #if DEBUG
             printf(RED "\tWorker proc %d needed an extra level of recursion to calculate the "
                    "integral on the interval [%f, %f].\n" RESET, rank, left, right);
