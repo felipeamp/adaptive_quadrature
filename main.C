@@ -19,11 +19,15 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 #define NUM_WORKER_PROCS 4 //2 4 8
-#define NUM_INTERVALS 100 // 25 50 75 125 150 175
+#define NUM_INTERVALS 100 // 50 100 200
 #define TAU 0.001 // Maximum allowed error ratio between new_trap_1 + new_trap_2 and old_trap
 
 double inv_function(double x) {
     return 1.0/x;
+}
+
+double two_times_x_function(double x) {
+    return 2.0*x;
 }
 
 double const_function(double x) {
@@ -31,6 +35,7 @@ double const_function(double x) {
 }
 
 static double (*function_ptr)(double) = &inv_function;
+//static double (*function_ptr)(double) = &two_times_x_function;
 //static double (*function_ptr)(double) = &const_function;
 
 static double left = 0.001;
